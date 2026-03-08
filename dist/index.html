@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bro.Clicker</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="noise"></div>
+
+  <main class="app" id="appRoot">
+    <div class="hud-row">
+      <button class="aura-display" id="auraDisplay" aria-label="Open upgrades" disabled>
+        <span class="label">Aura</span>
+        <span class="value" id="auraCount">0</span>
+      </button>
+      <button class="hud-chip hud-button" id="statsToggle" type="button" aria-label="Open stats panel">Stats</button>
+      <button class="dev-toggle" id="devToggle" type="button" aria-pressed="false">DEV MODE: OFF</button>
+    </div>
+
+    <button class="bro-button" id="broButton">Bro.</button>
+
+    <button class="bruther-button" id="brutherButton" hidden>BRUTHER</button>
+    <p class="subtitle" id="subtitle">Click Bro. and start the brotherhood economy.</p>
+
+    <div class="pill-container" id="pillContainer" aria-hidden="false"></div>
+    <div class="custom-cursor" id="customCursor" hidden>&#x1F4AA;</div>
+  </main>
+
+  <section class="upgrade-menu" id="upgradeMenu" aria-hidden="true">
+    <button class="menu-close" id="menuClose" aria-label="Close upgrades">x</button>
+    <div class="upgrade-menu-content">
+      <h2>Bro Upgrade Tree</h2>
+      <p class="upgrade-help">Spend Aura to unlock chaos, jokes, and better bro-tech.</p>
+      <div class="upgrade-tree" id="upgradeTree"></div>
+    </div>
+  </section>
+
+  <section class="stats-menu" id="statsMenu" aria-hidden="true">
+    <button class="menu-close" id="statsClose" aria-label="Close stats">x</button>
+    <div class="upgrade-menu-content">
+      <h2>Session Stats</h2>
+      <div class="stats-list">
+        <div class="stats-row"><span>Total Bros</span><strong id="statTotalBros">0</strong></div>
+        <div class="stats-row"><span>Surfer Bros Created</span><strong id="statSurferBrosCreated">0</strong></div>
+        <div class="stats-row"><span>Aura Farmed (All Time)</span><strong id="statAuraFarmed">0</strong></div>
+      </div>
+      <h3 class="stats-subhead">Bros Clicked</h3>
+      <div class="stats-list" id="statBrosClicked"></div>
+    </div>
+  </section>
+
+  <script src="game.js"></script>
+</body>
+</html>
