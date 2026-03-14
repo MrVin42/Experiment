@@ -13,6 +13,7 @@
   const LAUNCHER_SIZE = 58;
   const LAUNCHER_RADIUS = LAUNCHER_SIZE * 0.5;
   const UPGRADE_UNLOCK_AURA = 10;
+  const FLEX_CHAIN = ["flex1", "flex2", "gigaFlex", "shakaBruddah"];
   const BRO_TYPE_CHAIN = [
     "braDialect",
     "brotherDialect",
@@ -26,10 +27,10 @@
     "bruhCore",
     "bruhLonger",
     "bruhSquad",
-    "waveRider",
-    "autoBruh",
-    "broAi"
+    "waveRider"
   ];
+  const AUTO_BRUH_CHAIN = ["autoBruh", "broAi"];
+  const PROGRESSIVE_TREES = [FLEX_CHAIN, BRO_TYPE_CHAIN, LAUNCHER_CHAIN, AUTO_BRUH_CHAIN];
 
   const COLORS = [
     "linear-gradient(135deg, #28f1cd, #3fa4ff)",
@@ -47,7 +48,6 @@
     "Every click adds 1% more lore.",
     "No cap: this is professional bro science.",
     "You are now the chief bra officer.",
-    "Festival scouts are checking the wave.",
     "The crowd is chanting BRO in 4/4 time."
   ];
 
@@ -84,6 +84,18 @@
       apply: (fx) => {
         fx.hitRadius = Math.max(fx.hitRadius, 155);
         fx.cursorSize = "58px";
+      }
+    },
+    {
+      id: "shakaBruddah",
+      name: "Shaka Bruddah",
+      description: "Final flex form. Cursor becomes a giant shaka and the click aura gets even wider.",
+      baseCost: 120,
+      prerequisites: ["gigaFlex"],
+      apply: (fx) => {
+        fx.hitRadius = Math.max(fx.hitRadius, 185);
+        fx.cursorSize = "87px";
+        fx.cursorGlyph = "\u{1F919}";
       }
     },
     {
@@ -124,7 +136,7 @@
       baseCost: 30,
       prerequisites: [],
       apply: (fx) => {
-        fx.vocab.push({ text: "bra", weight: 1, voice: "bra" });
+        fx.vocab.push({ text: "bra", weight: 1, voice: "bra", auraBonus: 1 });
       }
     },
     {
@@ -134,7 +146,7 @@
       baseCost: 54,
       prerequisites: ["braDialect"],
       apply: (fx) => {
-        fx.vocab.push({ text: "brother", weight: 0.6, voice: "brother", auraBonus: 1 });
+        fx.vocab.push({ text: "brother", weight: 0.6, voice: "brother", auraBonus: 2 });
       }
     },
     {
@@ -144,7 +156,7 @@
       baseCost: 70,
       prerequisites: ["brotherDialect"],
       apply: (fx) => {
-        fx.vocab.push({ text: "broski", weight: 0.5, voice: "broski", auraBonus: 2 });
+        fx.vocab.push({ text: "broski", weight: 0.5, voice: "broski", auraBonus: 3 });
       }
     },
     {
@@ -154,7 +166,7 @@
       baseCost: 95,
       prerequisites: ["broskiDialect"],
       apply: (fx) => {
-        fx.vocab.push({ text: "brosquito", weight: 0.42, voice: "brosquito", auraBonus: 3 });
+        fx.vocab.push({ text: "brosquito", weight: 0.42, voice: "brosquito", auraBonus: 4 });
       }
     },
     {
@@ -164,7 +176,7 @@
       baseCost: 130,
       prerequisites: ["brosquitoDialect"],
       apply: (fx) => {
-        fx.vocab.push({ text: "bruv", weight: 0.35, voice: "bruv", auraBonus: 4 });
+        fx.vocab.push({ text: "bruv", weight: 0.35, voice: "bruv", auraBonus: 7 });
       }
     },
     {
@@ -174,7 +186,7 @@
       baseCost: 180,
       prerequisites: ["bruvDialect"],
       apply: (fx) => {
-        fx.vocab.push({ text: "broasurus rex", weight: 0.24, voice: "broasurus", auraBonus: 6 });
+        fx.vocab.push({ text: "broasurus rex", weight: 0.24, voice: "broasurus", auraBonus: 9 });
       }
     },
     {
@@ -184,7 +196,7 @@
       baseCost: 240,
       prerequisites: ["broasurusRexDialect"],
       apply: (fx) => {
-        fx.vocab.push({ text: "bratholomew", weight: 0.18, voice: "bratholomew", auraBonus: 9 });
+        fx.vocab.push({ text: "bratholomew", weight: 0.18, voice: "bratholomew", auraBonus: 14 });
       }
     },
     {
@@ -258,19 +270,6 @@
       prerequisites: ["brotherDialect"],
       apply: (fx) => {
         fx.passiveAuraPerSecond += 2;
-      }
-    },
-    {
-      id: "festivalMode",
-      name: "Festival Mode",
-      description: "Every cycle triggers a 10s event: multiplied gains and max-intensity voice lines.",
-      baseCost: 260,
-      prerequisites: ["broAi", "auraPrinter"],
-      apply: (fx) => {
-        fx.festivalEnabled = true;
-        fx.festivalMultiplier = Math.max(fx.festivalMultiplier, 2.4);
-        fx.festivalDurationMs = Math.max(fx.festivalDurationMs, 10000);
-        fx.festivalCooldownMs = Math.min(fx.festivalCooldownMs, 45000);
       }
     },
     {
@@ -348,8 +347,6 @@
     lastAutoLauncherAt: 0,
     lastFlavorAt: 0,
     nextPassiveTickAt: 0,
-    festivalActiveUntil: 0,
-    nextFestivalAt: 0,
     cursorX: -999,
     cursorY: -999,
     launcherCollisionAccumulator: 0,
@@ -477,12 +474,8 @@
     return arr[Math.floor(Math.random() * arr.length)];
   }
 
-  function isFestivalActive(now = performance.now()) {
-    return state.festivalActiveUntil > 0 && now < state.festivalActiveUntil;
-  }
-
-  function getAuraMultiplier(now = performance.now()) {
-    return isFestivalActive(now) ? state.effects.festivalMultiplier : 1;
+  function getAuraMultiplier() {
+    return 1;
   }
 
 
@@ -509,6 +502,7 @@
     const fx = {
       cursorEnabled: false,
       cursorSize: "32px",
+      cursorGlyph: "\u{1F4AA}",
       hitRadius: 0,
       auraPerHit: 1,
       splitCount: 4,
@@ -520,10 +514,6 @@
       launcherChainBoost: 0,
       autoLauncherMs: Number.POSITIVE_INFINITY,
       passiveAuraPerSecond: 0,
-      festivalEnabled: false,
-      festivalMultiplier: 1,
-      festivalDurationMs: 0,
-      festivalCooldownMs: Number.POSITIVE_INFINITY,
       brutherEnabled: false,
       vocab: [{ text: "bro", weight: 1, voice: "bro" }]
     };
@@ -542,12 +532,20 @@
     return state.purchased.has(chain[idx - 1]);
   }
 
+  function isCurrentTreeStep(chain, upgradeId) {
+    const nextId = chain.find((id) => !state.purchased.has(id));
+    if (!nextId) return false;
+    return nextId === upgradeId;
+  }
+
   function hasUpgradeDependencies(upgrade) {
     for (const dep of upgrade.prerequisites) {
       if (!state.purchased.has(dep)) return false;
     }
+    if (!chainDependencyMet(FLEX_CHAIN, upgrade.id)) return false;
     if (!chainDependencyMet(BRO_TYPE_CHAIN, upgrade.id)) return false;
     if (!chainDependencyMet(LAUNCHER_CHAIN, upgrade.id)) return false;
+    if (!chainDependencyMet(AUTO_BRUH_CHAIN, upgrade.id)) return false;
     return true;
   }
 
@@ -555,6 +553,20 @@
     if (state.devMode) return true;
     return hasUpgradeDependencies(upgrade);
   }
+
+  function shouldRenderUpgrade(upgrade) {
+    if (state.devMode) return true;
+
+    for (const tree of PROGRESSIVE_TREES) {
+      if (tree.includes(upgrade.id)) {
+        return isCurrentTreeStep(tree, upgrade.id);
+      }
+    }
+
+    if (state.purchased.has(upgrade.id)) return true;
+    return hasUpgradeDependencies(upgrade);
+  }
+
   function canPurchase(upgrade) {
     if (state.purchased.has(upgrade.id)) return false;
     if (!isUpgradeUnlockedForStore(upgrade)) return false;
@@ -650,10 +662,12 @@
     if (fx.cursorEnabled) {
       document.body.classList.add("flex-cursor");
       elements.customCursor.hidden = false;
+      elements.customCursor.textContent = fx.cursorGlyph;
       elements.customCursor.style.fontSize = fx.cursorSize;
     } else {
       document.body.classList.remove("flex-cursor");
       elements.customCursor.hidden = true;
+      elements.customCursor.textContent = "\u{1F4AA}";
     }
 
     elements.brutherButton.hidden = !fx.brutherEnabled;
@@ -682,6 +696,8 @@
     const frag = document.createDocumentFragment();
 
     for (const upgrade of UPGRADE_DEFS) {
+      if (!shouldRenderUpgrade(upgrade)) continue;
+
       const purchased = state.purchased.has(upgrade.id);
       const available = canPurchase(upgrade);
       const prereqMissing = !isUpgradeUnlockedForStore(upgrade);
@@ -1308,30 +1324,7 @@
     }
   }
 
-  function maybeFestivalMode(now) {
-    if (!state.effects.festivalEnabled) return;
-
-    if (state.nextFestivalAt === 0) {
-      state.nextFestivalAt = now + state.effects.festivalCooldownMs;
-      return;
-    }
-
-    if (state.festivalActiveUntil > 0 && now >= state.festivalActiveUntil) {
-      state.festivalActiveUntil = 0;
-      showFlavor("Festival Mode ended. Crowd catching breath.");
-    }
-
-    if (state.festivalActiveUntil === 0 && now >= state.nextFestivalAt) {
-      state.festivalActiveUntil = now + state.effects.festivalDurationMs;
-      state.nextFestivalAt = now + state.effects.festivalCooldownMs;
-      showFlavor("FESTIVAL MODE: gain multiplier online for 10s.");
-      soundboard.playBruther();
-      pulseScreen();
-    }
-  }
-
   function maybeFlavorLine(now) {
-    if (isFestivalActive(now)) return;
     if (now - state.lastFlavorAt < 2800) return;
     if (Math.random() > 0.06) return;
     state.lastFlavorAt = now;
@@ -1363,7 +1356,6 @@
 
     maybeAutoLauncher(now, width, height);
     maybePassiveAura(now);
-    maybeFestivalMode(now);
     maybeFlavorLine(now);
     renderStatsPanel();
 
