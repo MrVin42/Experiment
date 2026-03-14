@@ -1,5 +1,5 @@
 (() => {
-  const MAX_PILLS = 500;
+  const MAX_PILLS = 400;
   const MAX_SURFERS = 120;
   const PILL_GRID_CELL_SIZE = 120;
   const MAX_PILL_COLLISION_RADIUS = 32;
@@ -8,9 +8,28 @@
   const SURFER_MAX_SPLIT_DEPTH = 2;
   const SURFER_SPLIT_BUDGET_PER_SECOND = 10;
   const SURFER_HIT_SPLIT_CAP = 2;
+  const PILL_SPRITE_SCALE = 2;
+  const MAX_PILL_BURSTS_PER_SECOND = 5;
   const LAUNCHER_SIZE = 58;
   const LAUNCHER_RADIUS = LAUNCHER_SIZE * 0.5;
   const UPGRADE_UNLOCK_AURA = 10;
+  const BRO_TYPE_CHAIN = [
+    "braDialect",
+    "brotherDialect",
+    "broskiDialect",
+    "brosquitoDialect",
+    "bruvDialect",
+    "broasurusRexDialect",
+    "bratholomewDialect"
+  ];
+  const LAUNCHER_CHAIN = [
+    "bruhCore",
+    "bruhLonger",
+    "bruhSquad",
+    "waveRider",
+    "autoBruh",
+    "broAi"
+  ];
 
   const COLORS = [
     "linear-gradient(135deg, #28f1cd, #3fa4ff)",
@@ -215,7 +234,7 @@
       name: "Auto Bruh Engine",
       description: "Automatically spawn BRUH launchers every 5 seconds.",
       baseCost: 145,
-      prerequisites: ["bruhSquad"],
+      prerequisites: ["waveRider"],
       apply: (fx) => {
         fx.autoLauncherMs = Math.min(fx.autoLauncherMs, 5000);
       }
@@ -322,7 +341,6 @@
     purchased: new Set(),
     pills: [],
     launchers: [],
-    pillByEl: new WeakMap(),
     dirtyPills: false,
     pillGrid: new Map(),
     effects: null,
@@ -336,8 +354,16 @@
     cursorY: -999,
     launcherCollisionAccumulator: 0,
     surferSplitBudget: SURFER_SPLIT_BUDGET_PER_SECOND,
+    lastBruhVoiceAt: 0,
+    lastSurferVoiceAt: 0,
+    burstWindowStartAt: 0,
+    burstCountInWindow: 0,
     devMode: false,
     statsDirty: true,
+    pillCanvas: null,
+    pillCtx: null,
+    pillSprites: new Map(),
+    canvasDirty: true,
     sessionStats: {
       totalBros: 0,
       surferBrosCreated: 0,
@@ -510,14 +536,30 @@
 
     return fx;
   }
+  function chainDependencyMet(chain, upgradeId) {
+    const idx = chain.indexOf(upgradeId);
+    if (idx <= 0) return true;
+    return state.purchased.has(chain[idx - 1]);
+  }
 
-  function canPurchase(upgrade) {
-    if (state.purchased.has(upgrade.id)) return false;
-    if (state.devMode) return true;
-    if (state.aura < upgrade.cost) return false;
+  function hasUpgradeDependencies(upgrade) {
     for (const dep of upgrade.prerequisites) {
       if (!state.purchased.has(dep)) return false;
     }
+    if (!chainDependencyMet(BRO_TYPE_CHAIN, upgrade.id)) return false;
+    if (!chainDependencyMet(LAUNCHER_CHAIN, upgrade.id)) return false;
+    return true;
+  }
+
+  function isUpgradeUnlockedForStore(upgrade) {
+    if (state.devMode) return true;
+    return hasUpgradeDependencies(upgrade);
+  }
+  function canPurchase(upgrade) {
+    if (state.purchased.has(upgrade.id)) return false;
+    if (!isUpgradeUnlockedForStore(upgrade)) return false;
+    if (state.devMode) return true;
+    if (state.aura < upgrade.cost) return false;
     return true;
   }
 
@@ -589,6 +631,10 @@
     elements.statsMenu.setAttribute("aria-hidden", "true");
   }
 
+  function isOverlayOpen() {
+    return elements.upgradeMenu.classList.contains("open") || elements.statsMenu.classList.contains("open");
+  }
+
   function showFlavor(text) {
     elements.subtitle.textContent = text;
   }
@@ -625,6 +671,7 @@
 
     state.effects = computeEffects();
     syncCursorVisuals();
+    ensurePillCanvas();
     renderUpgrades();
 
     showFlavor(`Upgrade purchased: ${upgrade.name}.`);
@@ -637,7 +684,7 @@
     for (const upgrade of UPGRADE_DEFS) {
       const purchased = state.purchased.has(upgrade.id);
       const available = canPurchase(upgrade);
-      const prereqMissing = !state.devMode && upgrade.prerequisites.some((p) => !state.purchased.has(p));
+      const prereqMissing = !isUpgradeUnlockedForStore(upgrade);
 
       const node = document.createElement("div");
       node.className = "upgrade-node";
@@ -681,22 +728,146 @@
   }
 
   function pillVisualSize(text) {
-    if (text === "brother") return { w: 90, h: 30, r: 32 };
-    return { w: 64, h: 30, r: 26 };
+    const normalizedLength = String(text || "").replace(/\s+/g, "").length;
+    const width = Math.max(64, Math.min(180, 26 + normalizedLength * 10));
+    const height = 32;
+    return { w: width, h: height, r: Math.max(26, Math.floor(width * 0.5)) };
+  }
+
+  function getPillStyleKey(pill) {
+    return pill.voice || "bro";
+  }
+
+  function getPillStyle(styleKey) {
+    const byVoice = {
+      bro: { fg: "#061018", bgA: "#28f1cd", bgB: "#3fa4ff" },
+      bra: { fg: "#1f0d24", bgA: "#ff7dbd", bgB: "#ffe176" },
+      brother: { fg: "#1a1100", bgA: "#ffe176", bgB: "#ffb85a" },
+      broski: { fg: "#061018", bgA: "#85f7ff", bgB: "#00d4ff" },
+      brosquito: { fg: "#06201a", bgA: "#9be15d", bgB: "#00e3ae" },
+      bruv: { fg: "#14081c", bgA: "#cda0ff", bgB: "#ff9fd0" },
+      broasurus: { fg: "#13230a", bgA: "#b4ff6a", bgB: "#39d98a" },
+      bratholomew: { fg: "#210f00", bgA: "#ffd37a", bgB: "#ff8f5c" }
+    };
+    return byVoice[styleKey] || byVoice.bro;
+  }
+
+  function ensurePillCanvas() {
+    if (state.pillCanvas) return;
+    const canvas = document.createElement("canvas");
+    canvas.className = "pill-canvas";
+    elements.pillContainer.prepend(canvas);
+    state.pillCanvas = canvas;
+    state.pillCtx = canvas.getContext("2d", { alpha: true });
+    resizePillCanvas();
+  }
+
+  function resizePillCanvas() {
+    if (!state.pillCanvas || !state.pillCtx) return;
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const width = Math.max(1, Math.floor(window.innerWidth));
+    const height = Math.max(1, Math.floor(window.innerHeight));
+    state.pillCanvas.width = Math.floor(width * dpr);
+    state.pillCanvas.height = Math.floor(height * dpr);
+    state.pillCanvas.style.width = `${width}px`;
+    state.pillCanvas.style.height = `${height}px`;
+    state.pillCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    state.canvasDirty = true;
+  }
+
+  function getOrCreatePillSprite(styleKey, text, w, h) {
+    const spriteKey = `${styleKey}:${text}:${w}:${h}`;
+    const existing = state.pillSprites.get(spriteKey);
+    if (existing) return existing;
+
+    const sw = Math.ceil(w * PILL_SPRITE_SCALE);
+    const sh = Math.ceil(h * PILL_SPRITE_SCALE);
+    const canvas = document.createElement("canvas");
+    canvas.width = sw;
+    canvas.height = sh;
+    const ctx = canvas.getContext("2d");
+    const style = getPillStyle(styleKey);
+
+    const grad = ctx.createLinearGradient(0, 0, sw, sh);
+    grad.addColorStop(0, style.bgA);
+    grad.addColorStop(1, style.bgB);
+
+    const radius = Math.floor(sh * 0.5);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.moveTo(radius, 0);
+    ctx.lineTo(sw - radius, 0);
+    ctx.quadraticCurveTo(sw, 0, sw, radius);
+    ctx.lineTo(sw, sh - radius);
+    ctx.quadraticCurveTo(sw, sh, sw - radius, sh);
+    ctx.lineTo(radius, sh);
+    ctx.quadraticCurveTo(0, sh, 0, sh - radius);
+    ctx.lineTo(0, radius);
+    ctx.quadraticCurveTo(0, 0, radius, 0);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = style.fg;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    let fontSize = Math.max(13, Math.floor(sh * 0.44));
+    while (fontSize > 12) {
+      ctx.font = `700 ${fontSize}px Space Grotesk`;
+      if (ctx.measureText(text).width <= sw - 18) break;
+      fontSize -= 1;
+    }
+    ctx.font = `700 ${fontSize}px Space Grotesk`;
+    ctx.fillText(text, sw / 2, sh / 2 + 1);
+
+    const sprite = { canvas, w, h };
+    state.pillSprites.set(spriteKey, sprite);
+    return sprite;
+  }
+
+  function renderPillsCanvas() {
+    if (!state.pillCtx || !state.pillCanvas) return;
+    if (!state.canvasDirty) return;
+
+    const ctx = state.pillCtx;
+    ctx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+
+    for (const pill of state.pills) {
+      if (!pill.alive) continue;
+      const sprite = getOrCreatePillSprite(getPillStyleKey(pill), pill.text, pill.w, pill.h);
+      ctx.drawImage(sprite.canvas, pill.x, pill.y, pill.w, pill.h);
+    }
+
+    state.canvasDirty = false;
+  }
+
+  function findPillAtPoint(clientX, clientY) {
+    let best = null;
+    let bestScore = Number.POSITIVE_INFINITY;
+
+    for (const pill of state.pills) {
+      if (!pill.alive) continue;
+      const cx = pill.x + pill.w * 0.5;
+      const cy = pill.y + pill.h * 0.5;
+      const dx = clientX - cx;
+      const dy = clientY - cy;
+      const distSq = dx * dx + dy * dy;
+      if (distSq <= pill.r * pill.r && distSq < bestScore) {
+        best = pill;
+        bestScore = distSq;
+      }
+    }
+
+    return best;
   }
 
   function createPill(x, y, speedMultiplier = 1) {
     if (state.pills.length >= MAX_PILLS) return null;
+
     const vocab = chooseVocabEntry();
     const size = pillVisualSize(vocab.text);
     const angle = randomFloat(0, Math.PI * 2);
     const speed = randomFloat(55, 120) * speedMultiplier;
-
-    const bg = randomItem(COLORS);
-    const el = document.createElement("span");
-    el.className = "bro-pill";
-    el.textContent = vocab.text;
-    el.style.background = bg;
+    const style = getPillStyle(vocab.voice);
 
     const pill = {
       x,
@@ -709,29 +880,25 @@
       text: vocab.text,
       voice: vocab.voice,
       auraBonus: vocab.auraBonus || 0,
-      bg,
-      alive: true,
-      el
+      bg: `linear-gradient(135deg, ${style.bgA}, ${style.bgB})`,
+      alive: true
     };
 
     state.pills.push(pill);
-    state.pillByEl.set(el, pill);
-    elements.pillContainer.append(el);
-    renderPill(pill);
+    state.canvasDirty = true;
     incrementTotalBros();
-
     return pill;
   }
 
   function renderPill(pill) {
-    pill.el.style.transform = `translate3d(${pill.x}px, ${pill.y}px, 0)`;
+    state.canvasDirty = true;
   }
 
   function removePill(pill) {
     if (!pill.alive) return;
     pill.alive = false;
-    pill.el.remove();
     state.dirtyPills = true;
+    state.canvasDirty = true;
   }
 
   function cleanPillsIfNeeded() {
@@ -782,23 +949,40 @@
   }
 
   function spawnPillBreakBurst(pill) {
+    const now = performance.now();
+    if (now - state.burstWindowStartAt >= 1000) {
+      state.burstWindowStartAt = now;
+      state.burstCountInWindow = 0;
+    }
+    if (state.burstCountInWindow >= MAX_PILL_BURSTS_PER_SECOND) return;
+    state.burstCountInWindow += 1;
     const burst = document.createElement("div");
     burst.className = "pill-burst";
     burst.style.transform = `translate3d(${pill.x + pill.w * 0.5}px, ${pill.y + pill.h * 0.5}px, 0)`;
 
-    const shardCount = 6;
+    const shardCount = 12;
     for (let i = 0; i < shardCount; i += 1) {
       const shard = document.createElement("span");
       shard.className = "pill-shard";
       shard.style.background = pill.bg || randomItem(COLORS);
-      shard.style.setProperty("--dx", `${randomFloat(-32, 32)}px`);
-      shard.style.setProperty("--dy", `${randomFloat(-30, 26)}px`);
+      shard.style.setProperty("--dx", `${randomFloat(-64, 64)}px`);
+      shard.style.setProperty("--dy", `${randomFloat(-58, 54)}px`);
       shard.style.setProperty("--rot", `${randomFloat(-150, 150)}deg`);
       burst.append(shard);
     }
 
+    const sparkleCount = 16;
+    for (let i = 0; i < sparkleCount; i += 1) {
+      const sparkle = document.createElement("span");
+      sparkle.className = "pill-spark";
+      sparkle.style.background = "rgba(255, 255, 255, 0.95)";
+      sparkle.style.setProperty("--dx", `${randomFloat(-92, 92)}px`);
+      sparkle.style.setProperty("--dy", `${randomFloat(18, 150)}px`);
+      burst.append(sparkle);
+    }
+
     elements.pillContainer.append(burst);
-    setTimeout(() => burst.remove(), 450);
+    setTimeout(() => burst.remove(), 700);
   }
 
   function hitPill(pill, cause, options = {}) {
@@ -831,10 +1015,12 @@
     if (cause === "click") {
       incrementBroClicked(pill.voice);
       soundboard.playVoice(pill.voice, { volume: 0.9 });
-    } else if (cause === "bruther") {
-      soundboard.playVoice(pill.voice, { volume: 0.9 });
     } else if (cause === "bruh") {
-      soundboard.playVoice("bro", { volume: 0.82, jitter: 0.03 });
+      const now = performance.now();
+      if (!isOverlayOpen() && now - state.lastBruhVoiceAt > 180) {
+        state.lastBruhVoiceAt = now;
+        soundboard.playVoice("bro", { volume: 0.82, jitter: 0.03 });
+      }
     }
   }
 
@@ -881,7 +1067,11 @@
     elements.pillContainer.append(el);
     renderLauncher(launcher);
     incrementSurferBrosCreated();
-    soundboard.playSurfer();
+    const now = performance.now();
+    if (!isOverlayOpen() && now - state.lastSurferVoiceAt > 320) {
+      state.lastSurferVoiceAt = now;
+      soundboard.playSurfer();
+    }
   }
 
   function renderLauncher(launcher) {
@@ -1169,6 +1359,7 @@
     rebuildPillSpatialIndex();
     updateLaunchers(dt, now, width, height, runLauncherCollisionChecks);
     cleanPillsIfNeeded();
+    renderPillsCanvas();
 
     maybeAutoLauncher(now, width, height);
     maybePassiveAura(now);
@@ -1196,12 +1387,9 @@
     });
 
     elements.pillContainer.addEventListener("click", (event) => {
-      const target = event.target;
-      if (!(target instanceof HTMLElement)) return;
-      if (!target.classList.contains("bro-pill")) return;
-
+      const pill = findPillAtPoint(event.clientX, event.clientY);
+      if (!pill) return;
       event.stopPropagation();
-      const pill = state.pillByEl.get(target);
       hitPill(pill, "click");
     });
 
@@ -1215,8 +1403,7 @@
         target.closest("#auraDisplay") ||
         target.closest("#statsToggle") ||
         target.closest("#broButton") ||
-        target.closest("#brutherButton") ||
-        target.closest(".bro-pill")
+        target.closest("#brutherButton")
       ) {
         return;
       }
@@ -1227,6 +1414,8 @@
 
       createLauncher(event.clientX, event.clientY);
     }, true);
+
+    window.addEventListener("resize", resizePillCanvas);
 
     document.addEventListener("mousemove", (event) => {
       state.cursorX = event.clientX;
@@ -1274,6 +1463,7 @@
   function init() {
     state.effects = computeEffects();
     syncCursorVisuals();
+    ensurePillCanvas();
     renderUpgrades();
     renderStatsPanel();
     bindEvents();
@@ -1282,6 +1472,22 @@
 
   init();
 })();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

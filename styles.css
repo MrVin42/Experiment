@@ -184,11 +184,21 @@ body {
   z-index: 13;
 }
 
+
 .pill-container {
   position: fixed;
   inset: 0;
   z-index: 4;
 }
+
+.pill-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
 
 .bro-pill,
 .bruh-launcher {
@@ -216,11 +226,11 @@ body {
   display: grid;
   place-items: center;
   line-height: 1;
-  background: radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.24), rgba(255, 255, 255, 0.02) 60%),
-    linear-gradient(135deg, rgba(58, 221, 241, 0.5), rgba(54, 144, 255, 0.34));
-  border: 1px solid rgba(145, 244, 255, 0.5);
-  border-radius: 16px;
-  box-shadow: 0 0 14px rgba(112, 220, 255, 0.75);
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  pointer-events: none;
 }
 
 .bruh-face {
@@ -246,8 +256,8 @@ body {
 }
 
 @keyframes surferBob {
-  0% { transform: translateY(0) rotate(-3deg); box-shadow: 0 0 10px rgba(112, 220, 255, 0.7); }
-  100% { transform: translateY(-4px) rotate(3deg); box-shadow: 0 0 16px rgba(112, 220, 255, 0.95); }
+  0% { transform: translateY(0) rotate(-3deg); }
+  100% { transform: translateY(-4px) rotate(3deg); }
 }
 
 body.flex-cursor,
@@ -465,20 +475,20 @@ body.flex-cursor * {
   position: absolute;
   left: 0;
   top: 0;
-  width: 10px;
-  height: 6px;
-  border-radius: 4px;
-  box-shadow: 0 0 8px rgba(255, 255, 255, 0.22);
-  animation: pillShardPop 430ms cubic-bezier(0.2, 0.9, 0.22, 1) forwards;
+  width: 20px;
+  height: 12px;
+  border-radius: 6px;
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.28);
+  animation: pillShardPop 560ms cubic-bezier(0.2, 0.9, 0.22, 1) forwards;
 }
 
 @keyframes pillShardPop {
   0% {
-    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1.2);
     opacity: 1;
   }
   100% {
-    transform: translate3d(var(--dx), var(--dy), 0) rotate(var(--rot)) scale(0.32);
+    transform: translate3d(var(--dx), var(--dy), 0) rotate(var(--rot)) scale(0.28);
     opacity: 0;
   }
 }
@@ -487,4 +497,34 @@ body.flex-cursor * {
 
 
 
+
+
+
+
+
+
+
+
+
+.pill-spark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.35);
+  animation: pillSparkShower 700ms cubic-bezier(0.12, 0.84, 0.2, 1) forwards;
+}
+
+@keyframes pillSparkShower {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.95;
+  }
+  100% {
+    transform: translate3d(var(--dx), var(--dy), 0) scale(0.2);
+    opacity: 0;
+  }
+}
 
